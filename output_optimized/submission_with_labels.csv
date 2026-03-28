@@ -1,0 +1,10 @@
+symbol,date,trade_id,violation_type,confidence_score,trade_reason_detailed,behavioral_context
+BATUSDT,2026-02-16,BATUSDT_00000527,ramping,0.93,"Ramping sequence (score=1.00), this qty=344 [2.6σ], monotonic price movement from wallet",No prior behavioral activity identified
+BATUSDT,2026-02-09,BATUSDT_00000520,spoofing,0.92,"Spoofing proxy: price moved 0.76% against close, next minute reversal 0.00%, qty=100",No prior behavioral activity identified
+BTCUSDT,2026-02-05,BTCUSDT_00000918,ramping,0.93,"Ramping sequence (score=1.00), this qty=4 [2.7σ], monotonic price movement from wallet",No prior behavioral activity identified
+BTCUSDT,2026-02-06,BTCUSDT_00002787,ramping,0.93,"Ramping sequence (score=1.00), this qty=5 [7.2σ], monotonic price movement from wallet",No prior behavioral activity identified
+ETHUSDT,2026-02-05,ETHUSDT_00003182,ramping,0.93,"Ramping sequence (score=1.00), this qty=8 [12.4σ], monotonic price movement from wallet",No prior behavioral activity identified
+LTCUSDT,2026-01-18,LTCUSDT_00000072,coordinated_pump,0.9,"Pump-dump context: traded during spike window, qty=0 [-0.2σ], iso_anomaly=0.46",No prior behavioral activity identified
+LTCUSDT,2026-01-18,LTCUSDT_00000887,coordinated_pump,0.9,"Pump-dump context: traded during spike window, qty=0 [-0.2σ], iso_anomaly=0.44",No prior behavioral activity identified
+SOLUSDT,2026-01-31,SOLUSDT_00002234,ramping,0.93,"Ramping sequence (score=1.00), this qty=4 [2.7σ], monotonic price movement from wallet",No prior behavioral activity identified
+USDCUSDT,2026-02-09,USDCUSDT_00001011,peg_break,0.95,"USDC=0.9878 (dev=1.22% from 1.0000), qty=198, notional=196 [35.5σ]",No prior behavioral activity identified

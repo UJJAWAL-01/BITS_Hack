@@ -1,0 +1,17 @@
+symbol,date,trade_id,violation_type,reason
+BATUSDT,2026-02-16,BATUSDT_00000527,ramping,Wallet traded in one direction with monotonic price progression
+BATUSDT,2026-02-09,BATUSDT_00000520,spoofing,Trade landed in an abnormally active BAT hour relative to its dead baseline
+BTCUSDT,2026-02-06,BTCUSDT_00002787,ramping,Wallet shows near-zero net directional flow across repeated trades
+BTCUSDT,2026-02-05,BTCUSDT_00000918,ramping,Wallet shows near-zero net directional flow across repeated trades
+DOGEUSDT,2026-01-13,DOGEUSDT_00001885,coordinated_pump,Large trade moved price away from close and the next minute reversed sharply
+ETHUSDT,2026-02-09,ETHUSDT_00001977,coordinated_pump,Trade occurred inside a pump-then-fast-dump market window with elevated activity
+ETHUSDT,2026-02-26,ETHUSDT_00000797,coordinated_pump,Wallet shows near-zero net directional flow across repeated trades
+ETHUSDT,2026-02-05,ETHUSDT_00003182,ramping,Wallet traded in one direction with monotonic price progression
+LTCUSDT,2026-01-15,LTCUSDT_00000181,wash_trading,Wallet shows near-zero net directional flow across repeated trades
+LTCUSDT,2026-02-25,LTCUSDT_00000459,wash_trading,Large trade moved price away from close and the next minute reversed sharply
+LTCUSDT,2026-01-18,LTCUSDT_00000072,coordinated_pump,Same wallet appears to round-trip buy and sell at similar price/size
+LTCUSDT,2026-01-18,LTCUSDT_00000887,coordinated_pump,Same wallet appears to round-trip buy and sell at similar price/size
+SOLUSDT,2026-01-31,SOLUSDT_00002234,ramping,Wallet traded in one direction with monotonic price progression
+USDCUSDT,2026-02-09,USDCUSDT_00001011,peg_break,USDC deviated materially from 1.0000 with meaningful trade size
+USDCUSDT,2026-01-14,USDCUSDT_00001001,peg_break,USDC deviated materially from 1.0000 with meaningful trade size
+USDCUSDT,2026-02-02,USDCUSDT_00001010,peg_break,USDC deviated materially from 1.0000 with meaningful trade size

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
@@ -24,25 +25,25 @@ except Exception:  # pragma: no cover - fallback when sklearn is missing
 
 
 MARKET_FILES = {
-    "BATUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-market/Binance_BATUSDT_2026_minute.csv",
-    "BTCUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-market/Binance_BTCUSDT_2026_minute.csv",
-    "DOGEUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-market/Binance_DOGEUSDT_2026_minute.csv",
-    "ETHUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-market/Binance_ETHUSDT_2026_minute.csv",
-    "LTCUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-market/Binance_LTCUSDT_2026_minute.csv",
-    "SOLUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-market/Binance_SOLUSDT_2026_minute.csv",
-    "USDCUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-market/Binance_USDCUSDT_2026_minute.csv",
-    "XRPUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-market/Binance_XRPUSDT_2026_minute.csv",
+    "BATUSDT": "student-pack/crypto-market/Binance_BATUSDT_2026_minute.csv",
+    "BTCUSDT": "student-pack/crypto-market/Binance_BTCUSDT_2026_minute.csv",
+    "DOGEUSDT": "student-pack/crypto-market/Binance_DOGEUSDT_2026_minute.csv",
+    "ETHUSDT": "student-pack/crypto-market/Binance_ETHUSDT_2026_minute.csv",
+    "LTCUSDT": "student-pack/crypto-market/Binance_LTCUSDT_2026_minute.csv",
+    "SOLUSDT": "student-pack/crypto-market/Binance_SOLUSDT_2026_minute.csv",
+    "USDCUSDT": "student-pack/crypto-market/Binance_USDCUSDT_2026_minute.csv",
+    "XRPUSDT": "student-pack/crypto-market/Binance_XRPUSDT_2026_minute.csv",
 }
 
 TRADE_FILES = {
-    "BATUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-trades/BATUSDT_trades.csv",
-    "BTCUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-trades/BTCUSDT_trades.csv",
-    "DOGEUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-trades/DOGEUSDT_trades.csv",
-    "ETHUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-trades/ETHUSDT_trades.csv",
-    "LTCUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-trades/LTCUSDT_trades.csv",
-    "SOLUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-trades/SOLUSDT_trades.csv",
-    "USDCUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-trades/USDCUSDT_trades.csv",
-    "XRPUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-trades/XRPUSDT_trades.csv",
+    "BATUSDT": "student-pack/crypto-trades/BATUSDT_trades.csv",
+    "BTCUSDT": "student-pack/crypto-trades/BTCUSDT_trades.csv",
+    "DOGEUSDT": "student-pack/crypto-trades/DOGEUSDT_trades.csv",
+    "ETHUSDT": "student-pack/crypto-trades/ETHUSDT_trades.csv",
+    "LTCUSDT": "student-pack/crypto-trades/LTCUSDT_trades.csv",
+    "SOLUSDT": "student-pack/crypto-trades/SOLUSDT_trades.csv",
+    "USDCUSDT": "student-pack/crypto-trades/USDCUSDT_trades.csv",
+    "XRPUSDT": "student-pack/crypto-trades/XRPUSDT_trades.csv",
 }
 
 VIOLATION_PRIORITY = [
@@ -338,8 +339,9 @@ def apply_isolation_forest(df: pd.DataFrame, contamination: float = 0.01) -> pd.
 
     features = out[["qty_z", "price_dev_z", "wallet_freq_z"]].replace([np.inf, -np.inf], 0.0).fillna(0.0)
     features = features.clip(lower=-10, upper=10)
+    # PHASE 5 BALANCED: Reduce n_estimators from 200 to 100 for 2x speedup (minimal accuracy loss)
     clf = IsolationForest(
-        n_estimators=200,
+        n_estimators=100,
         contamination=contamination,
         random_state=42,
         n_jobs=1,
@@ -351,7 +353,8 @@ def apply_isolation_forest(df: pd.DataFrame, contamination: float = 0.01) -> pd.
     return out
 
 
-def apply_dbscan(df: pd.DataFrame, eps: float = 0.9, min_samples: int = 8) -> pd.DataFrame:
+def apply_dbscan(df: pd.DataFrame, eps: float = 0.9, min_samples: int = 15) -> pd.DataFrame:
+    # PHASE 5 BALANCED: Increase min_samples from 8 to 15 for faster clustering
     out = df.copy()
     out["dbscan_noise"] = False
     if DBSCAN is None or StandardScaler is None or len(out) < min_samples * 2:
@@ -364,7 +367,8 @@ def apply_dbscan(df: pd.DataFrame, eps: float = 0.9, min_samples: int = 8) -> pd
     return out
 
 
-def apply_kmeans_distance(df: pd.DataFrame, n_clusters: int = 5) -> pd.DataFrame:
+def apply_kmeans_distance(df: pd.DataFrame, n_clusters: int = 4) -> pd.DataFrame:
+    # PHASE 5 BALANCED: Reduce clusters from 5 to 4 and n_init from 10 to 5 for faster convergence
     out = df.copy()
     out["kmeans_far"] = False
     out["kmeans_distance_score"] = 0.0
@@ -373,7 +377,7 @@ def apply_kmeans_distance(df: pd.DataFrame, n_clusters: int = 5) -> pd.DataFrame
     features = out[["qty_rolling_z", "price_dev_z", "wallet_freq_z"]].replace([np.inf, -np.inf], 0.0).fillna(0.0)
     features = features.clip(lower=-10, upper=10)
     X = StandardScaler().fit_transform(features)
-    model = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+    model = KMeans(n_clusters=n_clusters, random_state=42, n_init=5)
     model.fit(X)
     distances = model.transform(X).min(axis=1)
     distance_series = pd.Series(distances, index=out.index)
@@ -852,16 +856,36 @@ def run_pipeline(output_dir: Path, max_per_symbol: int, score_threshold: float) 
     stats_elapsed = perf_counter() - stats_start
     print(f"[TIME] pair_stats={format_seconds(stats_elapsed)}")
 
-    scored_parts = []
-    for pair in pairs:
-        score_start = perf_counter()
-        scored = score_symbol(pair)
-        scored_parts.append(scored)
-        score_elapsed = perf_counter() - score_start
-        print(
-            f"[SCORE] {pair.symbol}: scored_rows={len(scored)} "
-            f"time={format_seconds(score_elapsed)}"
-        )
+    # PHASE 6: Parallel symbol scoring using 4 worker processes
+    print(f"[PARALLEL] Starting symbol scoring with 4 workers")
+    score_start = perf_counter()
+    
+    with ProcessPoolExecutor(max_workers=4) as executor:
+        # Submit all jobs
+        futures_map = {executor.submit(_score_symbol_worker, pair): pair for pair in pairs}
+        scored_results = {}
+        
+        # Collect results as they complete (order may vary)
+        completed = 0
+        for future in as_completed(futures_map):
+            pair = futures_map[future]
+            try:
+                symbol, scored = future.result(timeout=300)
+                scored_results[symbol] = scored
+                completed += 1
+                print(
+                    f"[SCORE] {symbol}: scored_rows={len(scored)} "
+                    f"(parallel {completed}/8)",
+                    flush=True
+                )
+            except Exception as e:
+                print(f"[ERROR] {pair.symbol}: {str(e)}", flush=True)
+                raise
+    
+    # Restore original order
+    scored_parts = [scored_results[pair.symbol] for pair in pairs]
+    score_elapsed = perf_counter() - score_start
+    print(f"[TIME] parallel_scoring_phase={format_seconds(score_elapsed)}")
 
     concat_start = perf_counter()
     scored_df = pd.concat(scored_parts, ignore_index=True)

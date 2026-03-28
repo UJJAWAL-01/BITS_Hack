@@ -1,0 +1,16 @@
+symbol,date,event_start,event_end,violation_type,trade_count,trader_count,max_score,trade_ids,remarks
+USDCUSDT,2026-02-09,2026-02-09 11:01:00.000000,2026-02-09 11:01:00.000000,peg_break,1,1,0.9978405219176331,USDCUSDT_00001011,USDC deviated materially from 1.0000 with meaningful trade size
+USDCUSDT,2026-01-14,2026-01-14 11:39:00.000000,2026-01-14 11:39:00.000000,peg_break,1,1,0.8983410537093581,USDCUSDT_00001001,USDC deviated materially from 1.0000 with meaningful trade size
+USDCUSDT,2026-02-02,2026-02-02 10:48:00.000000,2026-02-02 10:48:00.000000,peg_break,1,1,0.8908539144649688,USDCUSDT_00001010,USDC deviated materially from 1.0000 with meaningful trade size
+LTCUSDT,2026-01-15,2026-01-15 15:47:03.454988,2026-01-15 15:47:03.454988,wash_trading,1,1,0.7430495424344261,LTCUSDT_00000181,Wallet shows near-zero net directional flow across repeated trades
+BTCUSDT,2026-02-06,2026-02-06 14:42:15.616479,2026-02-06 14:42:15.616479,ramping,1,1,0.7081032292462647,BTCUSDT_00002787,Wallet shows near-zero net directional flow across repeated trades
+SOLUSDT,2026-01-31,2026-01-31 18:43:58.562474,2026-01-31 18:43:58.562474,ramping,1,1,0.6926573077780894,SOLUSDT_00002234,Wallet traded in one direction with monotonic price progression
+DOGEUSDT,2026-01-13,2026-01-13 22:11:39.516733,2026-01-13 22:11:39.516733,coordinated_pump,1,1,0.6813268769265305,DOGEUSDT_00001885,Large trade moved price away from close and the next minute reversed sharply
+BATUSDT,2026-02-09,2026-02-09 10:05:00.000000,2026-02-09 10:05:00.000000,spoofing,1,1,0.6652845485855201,BATUSDT_00000520,Trade landed in an abnormally active BAT hour relative to its dead baseline
+ETHUSDT,2026-02-09,2026-02-09 20:08:36.054341,2026-02-09 20:08:36.054341,coordinated_pump,1,1,0.6510513788515178,ETHUSDT_00001977,Trade occurred inside a pump-then-fast-dump market window with elevated activity
+BATUSDT,2026-02-16,2026-02-16 10:58:00.000000,2026-02-16 10:58:00.000000,ramping,1,1,0.621846401886397,BATUSDT_00000527,Wallet traded in one direction with monotonic price progression
+BTCUSDT,2026-02-05,2026-02-05 04:50:16.821895,2026-02-05 04:50:16.821895,ramping,1,1,0.6202344648479513,BTCUSDT_00000918,Wallet shows near-zero net directional flow across repeated trades
+LTCUSDT,2026-02-25,2026-02-25 01:12:46.675241,2026-02-25 01:12:46.675241,wash_trading,1,1,0.6115751099930302,LTCUSDT_00000459,Large trade moved price away from close and the next minute reversed sharply
+LTCUSDT,2026-01-18,2026-01-18 17:41:10.003640,2026-01-18 17:42:39.594425,coordinated_pump,2,1,0.5773771263945059,LTCUSDT_00000072|LTCUSDT_00000887,Same wallet appears to round-trip buy and sell at similar price/size
+ETHUSDT,2026-02-05,2026-02-05 18:44:15.995320,2026-02-05 18:44:15.995320,ramping,1,1,0.5689103438691228,ETHUSDT_00003182,Wallet traded in one direction with monotonic price progression
+ETHUSDT,2026-02-26,2026-02-26 14:35:07.640985,2026-02-26 14:35:07.640985,coordinated_pump,1,1,0.5683308418715918,ETHUSDT_00000797,Wallet shows near-zero net directional flow across repeated trades
