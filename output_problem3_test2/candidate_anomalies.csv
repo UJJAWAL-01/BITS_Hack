@@ -1,0 +1,15 @@
+symbol,date,trade_id,timestamp,price,quantity,trader_id,violation_type,final_score,reason
+BATUSDT,2026-02-16,BATUSDT_00000527,2026-02-16 10:58:00.000000,0.130215,344.357452,trader_10,ramping,0.6110082414545914,Wallet traded in one direction with monotonic price progression
+BATUSDT,2026-02-09,BATUSDT_00000525,2026-02-09 14:07:30.164246,0.124671,90.894651,trader_10,spoofing,0.569857699931605,Trade landed in an abnormally active BAT hour relative to its dead baseline
+BTCUSDT,2026-02-06,BTCUSDT_00002787,2026-02-06 14:42:15.616479,68106.763217,5.254512,wallet_BTC0087,ramping,0.6554263606357346,Wallet shows near-zero net directional flow across repeated trades
+BTCUSDT,2026-01-13,BTCUSDT_00002921,2026-01-13 04:02:33.349844,91409.987379,9.107281,wallet_BTC0183,wash_trading,0.6277050578355463,Wallet shows near-zero net directional flow across repeated trades
+BTCUSDT,2026-02-05,BTCUSDT_00000918,2026-02-05 04:50:16.821895,71291.17068,3.557149,wallet_BTC0004,ramping,0.6187722761334289,Wallet shows near-zero net directional flow across repeated trades
+BTCUSDT,2026-02-12,BTCUSDT_00004671,2026-02-12 16:38:43.839474,66413.300721,6.559075,wallet_BTC0183,wash_trading,0.5664352110970112,Wallet shows near-zero net directional flow across repeated trades
+BTCUSDT,2026-02-05,BTCUSDT_00002861,2026-02-05 03:54:45.483696,71226.316111,5.41433,wallet_BTC0084,wash_trading,0.5518022384177191,Wallet shows near-zero net directional flow across repeated trades
+DOGEUSDT,2026-02-14,DOGEUSDT_00002021,2026-02-14 10:21:00.000000,0.099719,164.728559,trader_06,coordinated_pump,0.5576092505522134,IsolationForest flagged unusual quantity/price/wallet-frequency combination
+DOGEUSDT,2026-02-14,DOGEUSDT_00002022,2026-02-14 10:35:00.000000,0.099754,177.605006,trader_09,coordinated_pump,0.5562869358037108,IsolationForest flagged unusual quantity/price/wallet-frequency combination
+LTCUSDT,2026-01-15,LTCUSDT_00000181,2026-01-15 15:47:03.454988,70.746227,3.811284,wallet_LTC0074,wash_trading,0.62356218157372,Wallet shows near-zero net directional flow across repeated trades
+SOLUSDT,2026-01-31,SOLUSDT_00002234,2026-01-31 18:43:58.562474,100.030634,4.078943,wallet_SOL0117,ramping,0.565495447868767,Wallet traded in one direction with monotonic price progression
+USDCUSDT,2026-02-09,USDCUSDT_00001011,2026-02-09 11:01:00.000000,0.987836,198.014104,trader_05,peg_break,0.8898593994378479,USDC deviated materially from 1.0000 with meaningful trade size
+USDCUSDT,2026-01-14,USDCUSDT_00001001,2026-01-14 11:39:00.000000,1.005697,268.848994,trader_01,peg_break,0.7969761530835311,USDC deviated materially from 1.0000 with meaningful trade size
+USDCUSDT,2026-02-02,USDCUSDT_00001010,2026-02-02 10:48:00.000000,0.993304,126.01259,trader_04,peg_break,0.7707579326854637,USDC deviated materially from 1.0000 with meaningful trade size
