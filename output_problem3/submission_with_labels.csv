@@ -1,17 +1,44 @@
 symbol,date,trade_id,violation_type,reason
-BATUSDT,2026-02-16,BATUSDT_00000527,ramping,Wallet traded in one direction with monotonic price progression
-BATUSDT,2026-02-09,BATUSDT_00000520,spoofing,Trade landed in an abnormally active BAT hour relative to its dead baseline
-BTCUSDT,2026-02-06,BTCUSDT_00002787,ramping,Wallet shows near-zero net directional flow across repeated trades
-BTCUSDT,2026-02-05,BTCUSDT_00000918,ramping,Wallet shows near-zero net directional flow across repeated trades
-DOGEUSDT,2026-01-13,DOGEUSDT_00001885,coordinated_pump,Large trade moved price away from close and the next minute reversed sharply
-ETHUSDT,2026-02-09,ETHUSDT_00001977,coordinated_pump,Trade occurred inside a pump-then-fast-dump market window with elevated activity
-ETHUSDT,2026-02-26,ETHUSDT_00000797,coordinated_pump,Wallet shows near-zero net directional flow across repeated trades
-ETHUSDT,2026-02-05,ETHUSDT_00003182,ramping,Wallet traded in one direction with monotonic price progression
-LTCUSDT,2026-01-15,LTCUSDT_00000181,wash_trading,Wallet shows near-zero net directional flow across repeated trades
-LTCUSDT,2026-02-25,LTCUSDT_00000459,wash_trading,Large trade moved price away from close and the next minute reversed sharply
-LTCUSDT,2026-01-18,LTCUSDT_00000072,coordinated_pump,Same wallet appears to round-trip buy and sell at similar price/size
-LTCUSDT,2026-01-18,LTCUSDT_00000887,coordinated_pump,Same wallet appears to round-trip buy and sell at similar price/size
-SOLUSDT,2026-01-31,SOLUSDT_00002234,ramping,Wallet traded in one direction with monotonic price progression
-USDCUSDT,2026-02-09,USDCUSDT_00001011,peg_break,USDC deviated materially from 1.0000 with meaningful trade size
-USDCUSDT,2026-01-14,USDCUSDT_00001001,peg_break,USDC deviated materially from 1.0000 with meaningful trade size
-USDCUSDT,2026-02-02,USDCUSDT_00001010,peg_break,USDC deviated materially from 1.0000 with meaningful trade size
+BATUSDT,2026-02-09,BATUSDT_00000525,ramping,"Confirmed ramping: monotonic same-direction sequence, ramping_score=1.00, qty_intraday_z=4.07"
+BATUSDT,2026-02-16,BATUSDT_00000527,ramping,"Confirmed ramping: monotonic same-direction sequence, ramping_score=1.00, qty_intraday_z=2.55"
+BATUSDT,2026-02-09,BATUSDT_00000523,ramping,Part of a confirmed ramping event from the same wallet with monotonic price progression
+BATUSDT,2026-02-09,BATUSDT_00000524,ramping,Part of a confirmed ramping event from the same wallet with monotonic price progression
+BATUSDT,2026-02-09,BATUSDT_00000520,spoofing,"Confirmed spoofing proxy: price deviation=0.76%, next-minute reversal=0.00%"
+BTCUSDT,2026-02-20,BTCUSDT_00001966,wash_trading,"Confirmed wash-like flow: repeated near-zero net directional activity, wallet_freq_z=1.12"
+BTCUSDT,2026-02-05,BTCUSDT_00000918,wash_trading,"Confirmed wash-like flow: repeated near-zero net directional activity, wallet_freq_z=2.92"
+BTCUSDT,2026-02-05,BTCUSDT_00001146,wash_trading,Part of a confirmed wash-trading sequence with near-zero net directional flow
+BTCUSDT,2026-02-05,BTCUSDT_00001711,wash_trading,Part of a confirmed wash-trading sequence with near-zero net directional flow
+BTCUSDT,2026-02-05,BTCUSDT_00000591,wash_trading,Part of a confirmed wash-trading sequence with near-zero net directional flow
+BTCUSDT,2026-02-05,BTCUSDT_00002065,wash_trading,Part of a confirmed wash-trading sequence with near-zero net directional flow
+BTCUSDT,2026-02-06,BTCUSDT_00002787,ramping,"Confirmed ramping: monotonic same-direction sequence, ramping_score=1.00, qty_intraday_z=7.18"
+BTCUSDT,2026-01-04,BTCUSDT_00002136,ramping,"Confirmed ramping: monotonic same-direction sequence, ramping_score=1.00, qty_intraday_z=2.05"
+BTCUSDT,2026-01-20,BTCUSDT_00000161,ramping,"Confirmed ramping: monotonic same-direction sequence, ramping_score=1.00, qty_intraday_z=8.93"
+BTCUSDT,2026-01-20,BTCUSDT_00001821,ramping,"Confirmed ramping: monotonic same-direction sequence, ramping_score=1.00, qty_intraday_z=3.20"
+BTCUSDT,2026-02-05,BTCUSDT_00000007,ramping,"Confirmed ramping: monotonic same-direction sequence, ramping_score=1.00, qty_intraday_z=6.65"
+BTCUSDT,2026-02-16,BTCUSDT_00000275,ramping,"Confirmed ramping: monotonic same-direction sequence, ramping_score=1.00, qty_intraday_z=8.87"
+BTCUSDT,2026-02-06,BTCUSDT_00000985,ramping,Part of a confirmed ramping event from the same wallet with monotonic price progression
+BTCUSDT,2026-02-05,BTCUSDT_00003053,ramping,Part of a confirmed ramping event from the same wallet with monotonic price progression
+DOGEUSDT,2026-01-13,DOGEUSDT_00001885,coordinated_pump,"Confirmed pump event: trade inside pump-and-dump window, pump_score=0.26, qty_rolling_z=3.09"
+DOGEUSDT,2026-01-13,DOGEUSDT_00001399,coordinated_pump,Part of a confirmed coordinated pump event inside the same pump-and-dump window
+DOGEUSDT,2026-01-13,DOGEUSDT_00001281,coordinated_pump,Part of a confirmed coordinated pump event inside the same pump-and-dump window
+ETHUSDT,2026-02-09,ETHUSDT_00001977,coordinated_pump,"Confirmed pump event: trade inside pump-and-dump window, pump_score=0.59, qty_rolling_z=4.25"
+ETHUSDT,2026-02-26,ETHUSDT_00000797,coordinated_pump,"Confirmed pump event: trade inside pump-and-dump window, pump_score=0.15, qty_rolling_z=2.94"
+ETHUSDT,2026-02-09,ETHUSDT_00002702,coordinated_pump,Part of a confirmed coordinated pump event inside the same pump-and-dump window
+ETHUSDT,2026-01-30,ETHUSDT_00003115,ramping,"Confirmed ramping: monotonic same-direction sequence, ramping_score=1.00, qty_intraday_z=4.41"
+ETHUSDT,2026-01-29,ETHUSDT_00000971,ramping,"Confirmed ramping: monotonic same-direction sequence, ramping_score=1.00, qty_intraday_z=1.62"
+ETHUSDT,2026-02-05,ETHUSDT_00003182,ramping,"Confirmed ramping: monotonic same-direction sequence, ramping_score=1.00, qty_intraday_z=12.37"
+LTCUSDT,2026-01-15,LTCUSDT_00000181,wash_trading,"Confirmed wash-like flow: repeated near-zero net directional activity, wallet_freq_z=0.67"
+LTCUSDT,2026-02-25,LTCUSDT_00000459,wash_trading,"Confirmed wash-like flow: repeated near-zero net directional activity, wallet_freq_z=1.80"
+LTCUSDT,2026-01-18,LTCUSDT_00000072,round_trip_wash,"Confirmed round-trip wash: opposite-side match within 15 minutes, round_trip_score=0.95"
+LTCUSDT,2026-01-18,LTCUSDT_00000887,round_trip_wash,"Confirmed round-trip wash: opposite-side match within 15 minutes, round_trip_score=0.95"
+LTCUSDT,2026-01-23,LTCUSDT_00001353,ramping,"Confirmed ramping: monotonic same-direction sequence, ramping_score=1.00, qty_intraday_z=6.58"
+LTCUSDT,2026-02-16,LTCUSDT_00001161,ramping,"Confirmed ramping: monotonic same-direction sequence, ramping_score=1.00, qty_intraday_z=1.73"
+SOLUSDT,2026-01-31,SOLUSDT_00002234,ramping,"Confirmed ramping: monotonic same-direction sequence, ramping_score=1.00, qty_intraday_z=2.68"
+SOLUSDT,2026-01-15,SOLUSDT_00000552,ramping,"Confirmed ramping: monotonic same-direction sequence, ramping_score=1.00, qty_intraday_z=7.81"
+SOLUSDT,2026-02-13,SOLUSDT_00000356,ramping,"Confirmed ramping: monotonic same-direction sequence, ramping_score=1.00, qty_intraday_z=6.75"
+SOLUSDT,2026-02-11,SOLUSDT_00000126,ramping,"Confirmed ramping: monotonic same-direction sequence, ramping_score=1.00, qty_intraday_z=6.53"
+SOLUSDT,2026-01-31,SOLUSDT_00002380,ramping,Part of a confirmed ramping event from the same wallet with monotonic price progression
+SOLUSDT,2026-02-13,SOLUSDT_00000495,ramping,Part of a confirmed ramping event from the same wallet with monotonic price progression
+USDCUSDT,2026-02-09,USDCUSDT_00001011,peg_break,"Confirmed peg break: price=0.987836, deviation=1.22%, score=0.93"
+USDCUSDT,2026-01-14,USDCUSDT_00001001,peg_break,"Confirmed peg break: price=1.005697, deviation=0.57%, score=0.57"
+USDCUSDT,2026-02-02,USDCUSDT_00001010,peg_break,"Confirmed peg break: price=0.993304, deviation=0.67%, score=0.59"

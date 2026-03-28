@@ -1,0 +1,4 @@
+__pycache__/
+output_*/
+!output_problem3/
+!output_problem3/*.csv

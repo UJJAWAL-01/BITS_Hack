@@ -1,8 +1,8 @@
 from __future__ import annotations
-
 import argparse
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from time import perf_counter
 from typing import Iterable
@@ -118,17 +118,40 @@ def as_bool(series: pd.Series) -> pd.Series:
     return series.fillna(False).astype(bool)
 
 
+def expand_seed_windows(seed_indices: np.ndarray, size: int, lookback: int, lookahead: int) -> np.ndarray:
+    mask = np.zeros(size, dtype=bool)
+    for idx in seed_indices:
+        start = max(0, idx - lookback)
+        end = min(size, idx + lookahead + 1)
+        mask[start:end] = True
+    return mask
+
+
+def contiguous_event_ids(mask: np.ndarray | pd.Series, index: pd.Index) -> pd.Series:
+    arr = np.asarray(mask, dtype=bool)
+    starts = arr & ~np.concatenate(([False], arr[:-1]))
+    ids = np.cumsum(starts)
+    return pd.Series(ids * arr, index=index, dtype="int64")
+
+
 def prepare_market(symbol: str, path: str) -> pd.DataFrame:
-    df = pd.read_csv(path)
-    df["timestamp"] = pd.to_datetime(df["Date"])
-    df = df.sort_values("timestamp").reset_index(drop=True)
+    base_asset = symbol.removesuffix("USDT")
+    df = pd.read_csv(
+        path,
+        usecols=["Date", "High", "Low", "Close", f"Volume {base_asset}", "Volume USDT", "tradecount"],
+        parse_dates=["Date"],
+        memory_map=True,
+    )
+    df["timestamp"] = df["Date"]
+    if not df["timestamp"].is_monotonic_increasing:
+        df = df.sort_values("timestamp").reset_index(drop=True)
+    else:
+        df = df.reset_index(drop=True)
     df["symbol"] = symbol
-    base_asset = next(col for col in df.columns if col.startswith("Volume ") and not col.endswith("USDT"))
-    quote_asset = next(col for col in df.columns if col.endswith("USDT"))
     df = df.rename(
         columns={
-            base_asset: "volume_base",
-            quote_asset: "volume_quote",
+            f"Volume {base_asset}": "volume_base",
+            "Volume USDT": "volume_quote",
             "tradecount": "tradecount",
         }
     )
@@ -154,13 +177,42 @@ def prepare_market(symbol: str, path: str) -> pd.DataFrame:
     df["tradecount_rolling_z"] = rolling_zscore(np.log1p(df["tradecount"]), window=60)
     df["daily_volume_quote"] = df.groupby("date")["volume_quote"].transform("sum")
     df["is_close_window"] = df.groupby("date")["timestamp"].transform(lambda s: s == s.max()) | (df["minute_of_day"] >= 1430)
+    df["ret_1m_std_60"] = df["ret_1m"].rolling(60, min_periods=10).std(ddof=0).fillna(0.0)
+    df["ret_5m_std_60"] = df["ret_5m"].rolling(60, min_periods=10).std(ddof=0).fillna(0.0)
+    df["pump_signal"] = (
+        (df["ret_5m"] > df["ret_5m_std_60"] * 2.0)
+        & (df["volume_quote_rolling_z"] > 1.5)
+        & (df["tradecount_rolling_z"] > 1.5)
+    )
+    df["dump_signal"] = (
+        (df["ret_1m"] < -df["ret_1m_std_60"] * 2.0)
+        & (df["volume_quote_rolling_z"] > 1.5)
+    )
+    pump_seed = df["pump_signal"] & (
+        df["dump_signal"].shift(-1, fill_value=False) | df["dump_signal"].shift(-2, fill_value=False)
+    )
+    pump_window_mask = expand_seed_windows(
+        np.flatnonzero(pump_seed.to_numpy()),
+        size=len(df),
+        lookback=4,
+        lookahead=2,
+    )
+    df["pump_dump_event_id"] = contiguous_event_ids(pump_window_mask, index=df.index)
+    df["minute_reversal"] = ((df["Close"].shift(-1) - df["Close"]) / df["Close"].replace(0, np.nan)).fillna(0.0)
     return df
 
 
 def prepare_trades(symbol: str, path: str, market: pd.DataFrame) -> pd.DataFrame:
-    df = pd.read_csv(path)
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
-    df = df.sort_values("timestamp").reset_index(drop=True)
+    df = pd.read_csv(
+        path,
+        usecols=["trade_id", "timestamp", "price", "quantity", "side", "trader_id"],
+        parse_dates=["timestamp"],
+        memory_map=True,
+    )
+    if not df["timestamp"].is_monotonic_increasing:
+        df = df.sort_values("timestamp").reset_index(drop=True)
+    else:
+        df = df.reset_index(drop=True)
     df["symbol"] = symbol
     df["date"] = df["timestamp"].dt.date.astype(str)
     df["hour"] = df["timestamp"].dt.hour
@@ -233,6 +285,27 @@ def build_stats(pair_data: Iterable[PairData]) -> pd.DataFrame:
     return pd.DataFrame(rows).sort_values("symbol")
 
 
+def build_stats_row(pair: PairData) -> dict:
+    return {
+        "symbol": pair.symbol,
+        "market_close_mean": pair.market["Close"].mean(),
+        "market_close_std": pair.market["Close"].std(),
+        "market_close_min": pair.market["Close"].min(),
+        "market_close_max": pair.market["Close"].max(),
+        "trade_price_mean": pair.trades["price"].mean(),
+        "trade_price_std": pair.trades["price"].std(),
+        "trade_price_min": pair.trades["price"].min(),
+        "trade_price_max": pair.trades["price"].max(),
+        "trade_qty_mean": pair.trades["quantity"].mean(),
+        "trade_qty_std": pair.trades["quantity"].std(),
+        "trade_qty_min": pair.trades["quantity"].min(),
+        "trade_qty_max": pair.trades["quantity"].max(),
+        "trade_notional_mean": pair.trades["notional"].mean(),
+        "trade_notional_std": pair.trades["notional"].std(),
+        "trade_count": len(pair.trades),
+    }
+
+
 def detect_usdc_peg_breaks(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     out["peg_abs_deviation"] = (out["price"] - 1.0).abs()
@@ -268,6 +341,8 @@ def detect_wash_patterns(df: pd.DataFrame, window_minutes: int = 15) -> pd.DataF
     out["flag_round_trip"] = False
     out["flag_wash_like"] = False
     out["round_trip_score"] = 0.0
+    out["round_trip_event_id"] = 0
+    out["round_trip_event_size"] = 0
 
     for trader_id, group in out.groupby("trader_id", sort=False):
         if len(group) < 2:
@@ -297,6 +372,16 @@ def detect_wash_patterns(df: pd.DataFrame, window_minutes: int = 15) -> pd.DataF
                     local_flag[j] = True
         out.loc[idx, "flag_round_trip"] = local_flag
         out.loc[idx, "round_trip_score"] = local_score
+        flagged_positions = np.flatnonzero(local_flag)
+        if len(flagged_positions) > 0:
+            position_breaks = np.where(
+                (np.diff(flagged_positions) > 1)
+                | ((ts[flagged_positions[1:]] - ts[flagged_positions[:-1]]) / np.timedelta64(1, "m") > window_minutes)
+            )[0] + 1
+            for event_id, segment in enumerate(np.split(flagged_positions, position_breaks), start=1):
+                segment_idx = [idx[pos] for pos in segment]
+                out.loc[segment_idx, "round_trip_event_id"] = event_id
+                out.loc[segment_idx, "round_trip_event_size"] = len(segment)
 
         wallet_net = group["signed_qty"].sum()
         wallet_turnover = group["quantity"].sum()
@@ -308,25 +393,44 @@ def detect_wash_patterns(df: pd.DataFrame, window_minutes: int = 15) -> pd.DataF
 
 def detect_structuring(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
-    out["flag_structuring"] = False
-    out["structuring_score"] = 0.0
-    for trader_id, group in out.groupby("trader_id", sort=False):
-        if len(group) < 6:
-            continue
-        g = group.copy()
-        g["minute_bucket"] = g["timestamp"].dt.floor("15min")
-        for _, window in g.groupby("minute_bucket"):
-            if len(window) < 4:
-                continue
-            notional = window["notional"]
-            max_to_min = notional.max() / max(notional.min(), 1e-9)
-            near_round = ((notional % 1000).abs().clip(upper=1000)).mean()
-            if max_to_min <= 1.1 or near_round < 100:
-                score = min(1.0, len(window) / 8.0) * 0.6 + max(0.0, 1 - min(max_to_min - 1, 0.2) / 0.2) * 0.4
-                out.loc[window.index, "flag_structuring"] = True
-                out.loc[window.index, "structuring_score"] = np.maximum(
-                    out.loc[window.index, "structuring_score"], score
-                )
+    out["structuring_bucket"] = out["timestamp"].dt.floor("15min")
+    out["round_distance"] = (out["notional"] % 1000).abs().clip(upper=1000)
+    bucket_stats = (
+        out.groupby(["trader_id", "structuring_bucket"], sort=False)
+        .agg(
+            trade_count=("trade_id", "count"),
+            notional_max=("notional", "max"),
+            notional_min=("notional", "min"),
+            near_round=("round_distance", "mean"),
+        )
+        .reset_index()
+    )
+    bucket_stats["max_to_min"] = bucket_stats["notional_max"] / bucket_stats["notional_min"].clip(lower=1e-9)
+    bucket_stats["flag_structuring"] = (
+        (bucket_stats["trade_count"] >= 4)
+        & ((bucket_stats["max_to_min"] <= 1.1) | (bucket_stats["near_round"] < 100))
+    )
+    bucket_stats["structuring_score"] = (
+        np.minimum(1.0, bucket_stats["trade_count"] / 8.0) * 0.6
+        + np.maximum(0.0, 1 - np.minimum(bucket_stats["max_to_min"] - 1, 0.2) / 0.2) * 0.4
+    )
+    out = out.merge(
+        bucket_stats[
+            [
+                "trader_id",
+                "structuring_bucket",
+                "flag_structuring",
+                "structuring_score",
+                "trade_count",
+            ]
+        ],
+        on=["trader_id", "structuring_bucket"],
+        how="left",
+    )
+    out["flag_structuring"] = as_bool(out["flag_structuring"])
+    out["structuring_score"] = out["structuring_score"].fillna(0.0)
+    out["structuring_event_size"] = np.where(out["flag_structuring"], out["trade_count"].fillna(0), 0).astype(int)
+    out = out.drop(columns=["round_distance", "trade_count"])
     return out
 
 
@@ -387,23 +491,47 @@ def apply_kmeans_distance(df: pd.DataFrame, n_clusters: int = 4) -> pd.DataFrame
     return out
 
 
-def detect_ramping(df: pd.DataFrame) -> pd.DataFrame:
+def detect_ramping(df: pd.DataFrame, max_gap_minutes: int = 90) -> pd.DataFrame:
     out = df.copy()
     out["flag_ramping"] = False
     out["ramping_score"] = 0.0
+    out["ramping_event_id"] = 0
+    out["ramping_event_size"] = 0
     for trader_id, group in out.groupby("trader_id", sort=False):
         if len(group) < 4:
             continue
         g = group.sort_values("timestamp")
-        same_side = g["side_num"].rolling(4).apply(lambda x: 1.0 if len(set(x)) == 1 else 0.0, raw=False)
-        monotonic = g["price"].rolling(4).apply(
-            lambda x: 1.0 if pd.Series(x).is_monotonic_increasing or pd.Series(x).is_monotonic_decreasing else 0.0,
-            raw=False,
+        side = g["side_num"].to_numpy()
+        price = g["price"].to_numpy()
+        same_side_window = (
+            (side[3:] == side[2:-1])
+            & (side[2:-1] == side[1:-2])
+            & (side[1:-2] == side[:-3])
         )
-        score = ((same_side.fillna(0.0) + monotonic.fillna(0.0)) / 2.0).to_numpy()
-        flagged = score >= 1.0
-        out.loc[g.index, "flag_ramping"] = np.logical_or(out.loc[g.index, "flag_ramping"], flagged)
-        out.loc[g.index, "ramping_score"] = np.maximum(out.loc[g.index, "ramping_score"], score)
+        price_diff = np.diff(price)
+        monotonic_window = (
+            ((price_diff[:-2] >= 0) & (price_diff[1:-1] >= 0) & (price_diff[2:] >= 0))
+            | ((price_diff[:-2] <= 0) & (price_diff[1:-1] <= 0) & (price_diff[2:] <= 0))
+        )
+        qualifying_window_ends = np.flatnonzero(same_side_window & monotonic_window) + 3
+        if len(qualifying_window_ends) == 0:
+            continue
+        trade_flags = np.zeros(len(g), dtype=bool)
+        for end_idx in qualifying_window_ends:
+            trade_flags[end_idx - 3 : end_idx + 1] = True
+        out.loc[g.index[trade_flags], "flag_ramping"] = True
+        out.loc[g.index[trade_flags], "ramping_score"] = 1.0
+
+        flagged_positions = np.flatnonzero(trade_flags)
+        flagged_ts = g["timestamp"].to_numpy()[flagged_positions]
+        position_breaks = np.where(
+            (np.diff(flagged_positions) > 1)
+            | ((flagged_ts[1:] - flagged_ts[:-1]) / np.timedelta64(1, "m") > max_gap_minutes)
+        )[0] + 1
+        for event_id, segment in enumerate(np.split(flagged_positions, position_breaks), start=1):
+            segment_idx = g.index[segment]
+            out.loc[segment_idx, "ramping_event_id"] = event_id
+            out.loc[segment_idx, "ramping_event_size"] = len(segment)
     return out
 
 
@@ -411,40 +539,18 @@ def detect_pump_and_dump(df: pd.DataFrame, market: pd.DataFrame) -> pd.DataFrame
     out = df.copy()
     out["flag_pump_dump"] = False
     out["pump_dump_score"] = 0.0
-
-    minute = market[
-        [
-            "timestamp",
-            "ret_1m",
-            "ret_5m",
-            "vol_z",
-            "tradecount_z",
-            "volume_quote_rolling_z",
-            "tradecount_rolling_z",
-            "Close",
-        ]
-    ].copy()
-    minute["pump_signal"] = (
-        (minute["ret_5m"] > minute["ret_5m"].rolling(60, min_periods=10).std().fillna(0) * 2.0)
-        & (minute["volume_quote_rolling_z"] > 1.5)
-        & (minute["tradecount_rolling_z"] > 1.5)
-    )
-    minute["dump_signal"] = (
-        (minute["ret_1m"] < -minute["ret_1m"].rolling(60, min_periods=10).std().fillna(0) * 2.0)
-        & (minute["volume_quote_rolling_z"] > 1.5)
-    )
-
-    event_minutes: set[pd.Timestamp] = set()
-    for i in range(len(minute) - 2):
-        if not bool(minute.iloc[i]["pump_signal"]):
-            continue
-        next_slice = minute.iloc[i + 1 : i + 3]
-        if next_slice["dump_signal"].any():
-            start = minute.iloc[max(0, i - 4)]["timestamp"]
-            end = next_slice.iloc[-1]["timestamp"]
-            event_minutes.update(pd.date_range(start, end, freq="min"))
-
-    out["flag_pump_dump"] = out["minute"].isin(event_minutes)
+    event_id_map = market.set_index("timestamp")["pump_dump_event_id"]
+    out["pump_dump_event_id"] = out["minute"].map(event_id_map).fillna(0).astype(int)
+    out["flag_pump_dump"] = out["pump_dump_event_id"] > 0
+    out["pump_dump_event_size"] = 0
+    active_event_mask = out["pump_dump_event_id"] > 0
+    if active_event_mask.any():
+        out.loc[active_event_mask, "pump_dump_event_size"] = (
+            out.loc[active_event_mask]
+            .groupby("pump_dump_event_id")["trade_id"]
+            .transform("count")
+            .astype(int)
+        )
     out["pump_dump_score"] = (
         safe_rank(out["qty_z"].clip(lower=0)).fillna(0.0) * 0.4
         + safe_rank(out["notional_z"].clip(lower=0)).fillna(0.0) * 0.3
@@ -483,13 +589,7 @@ def detect_spoofing_proxy(df: pd.DataFrame, market: pd.DataFrame) -> pd.DataFram
     out["flag_spoofing_proxy"] = False
     out["flag_layering_proxy"] = False
     out["spoofing_score"] = 0.0
-
-    minute = market[["timestamp", "Close", "vol_z", "tradecount_z"]].copy()
-    minute["next_close"] = minute["Close"].shift(-1)
-    minute["reversal"] = (minute["next_close"] - minute["Close"]) / minute["Close"].replace(0, np.nan)
-    reversal_map = minute.set_index("timestamp")["reversal"]
-
-    out["minute_reversal"] = out["minute"].map(reversal_map).fillna(0.0)
+    out["minute_reversal"] = out["minute"].map(market.set_index("timestamp")["minute_reversal"]).fillna(0.0)
     out["flag_spoofing_proxy"] = (
         (out["qty_z"] > 1.8)
         & (out["price_dev_close"].abs() > 0.0015)
@@ -530,7 +630,9 @@ def build_flagged_events(scored: pd.DataFrame) -> pd.DataFrame:
         if subset.empty:
             continue
 
-        if violation in {"wash_trading", "round_trip_wash", "aml_structuring", "ramping", "spoofing", "layering"}:
+        if "event_anchor_trade_id" in subset.columns and subset["event_anchor_trade_id"].notna().any():
+            group_cols = ["symbol", "violation_type", "event_anchor_trade_id"]
+        elif violation in {"wash_trading", "round_trip_wash", "aml_structuring", "ramping", "spoofing", "layering"}:
             group_cols = ["symbol", "date", "trader_id"]
         else:
             group_cols = ["symbol", "date"]
@@ -673,6 +775,179 @@ def second_pass_confirm(candidates: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def resolve_confirmed_label(row: pd.Series) -> str:
+    confirmation = row.get("confirmation_reason", "")
+    if confirmation == "strict_peg_break":
+        return "peg_break"
+    if confirmation == "strict_coordinated_pump":
+        return "coordinated_pump"
+    if confirmation == "strict_spoofing_proxy":
+        return "spoofing"
+    if confirmation == "strict_layering_proxy":
+        return "layering"
+    if confirmation == "strict_ramping":
+        return "ramping"
+    if confirmation == "strict_wash":
+        if bool(row.get("flag_round_trip", False)):
+            return "round_trip_wash"
+        return "wash_trading"
+    if confirmation == "strict_aml_structuring":
+        return "aml_structuring"
+    if confirmation == "strict_marking_close":
+        return "marking_close"
+    if confirmation == "strict_bat_dead_hour":
+        if bool(row.get("flag_ramping", False)):
+            return "ramping"
+        if bool(row.get("flag_spoofing_proxy", False)):
+            return "spoofing"
+        if bool(row.get("flag_structuring", False)):
+            return "aml_structuring"
+        if bool(row.get("flag_round_trip", False)):
+            return "round_trip_wash"
+        if bool(row.get("flag_wash_like", False)):
+            return "wash_trading"
+        if bool(row.get("flag_pump_dump", False)):
+            return "coordinated_pump"
+    return row.get("raw_violation_type", row.get("violation_type", "spoofing"))
+
+
+def build_candidate_reason(row: pd.Series) -> str:
+    label = row.get("violation_type", "spoofing")
+    selection_source = row.get("selection_source", "direct_confirmation")
+    if selection_source == "event_expansion":
+        if label == "ramping":
+            return "Part of a confirmed ramping event from the same wallet with monotonic price progression"
+        if label == "coordinated_pump":
+            return "Part of a confirmed coordinated pump event inside the same pump-and-dump window"
+        if label == "round_trip_wash":
+            return "Part of a confirmed round-trip wash sequence with matched opposite-side trades"
+        if label == "wash_trading":
+            return "Part of a confirmed wash-trading sequence with near-zero net directional flow"
+        if label == "aml_structuring":
+            return "Part of a confirmed structuring sequence with repeated similar-sized trades"
+        return f"Part of a confirmed {label} event"
+
+    if label == "peg_break":
+        return (
+            f"Confirmed peg break: price={row['price']:.6f}, deviation={abs(row['price'] - 1.0) * 100:.2f}%, "
+            f"score={row.get('score_peg_break', 0.0):.2f}"
+        )
+    if label == "ramping":
+        return (
+            f"Confirmed ramping: monotonic same-direction sequence, ramping_score={row.get('ramping_score', 0.0):.2f}, "
+            f"qty_intraday_z={row.get('qty_intraday_z', 0.0):.2f}"
+        )
+    if label == "coordinated_pump":
+        return (
+            f"Confirmed pump event: trade inside pump-and-dump window, pump_score={row.get('pump_dump_score', 0.0):.2f}, "
+            f"qty_rolling_z={row.get('qty_rolling_z', 0.0):.2f}"
+        )
+    if label == "round_trip_wash":
+        return (
+            f"Confirmed round-trip wash: opposite-side match within {15} minutes, "
+            f"round_trip_score={row.get('round_trip_score', 0.0):.2f}"
+        )
+    if label == "wash_trading":
+        return (
+            f"Confirmed wash-like flow: repeated near-zero net directional activity, "
+            f"wallet_freq_z={row.get('wallet_freq_z', 0.0):.2f}"
+        )
+    if label == "aml_structuring":
+        return (
+            f"Confirmed structuring: repeated similar-size trades in 15-minute bucket, "
+            f"structuring_score={row.get('structuring_score', 0.0):.2f}"
+        )
+    if label == "spoofing":
+        return (
+            f"Confirmed spoofing proxy: price deviation={abs(row.get('price_dev_close', 0.0)) * 100:.2f}%, "
+            f"next-minute reversal={abs(row.get('minute_reversal', 0.0)) * 100:.2f}%"
+        )
+    if label == "layering":
+        return (
+            f"Confirmed layering proxy: burst activity with reversal, trades_in_minute={int(row.get('trades_in_minute', 0) or 0)}"
+        )
+    if label == "marking_close":
+        return (
+            f"Confirmed marking-the-close: close_window_share={row.get('close_window_share', 0.0):.2f}, "
+            f"day_volume_share={row.get('day_volume_share', 0.0):.2f}"
+        )
+    return row.get("raw_reason", row.get("reason", "Confirmed suspicious trade"))
+
+
+def normalize_confirmed_candidates(confirmed: pd.DataFrame) -> pd.DataFrame:
+    out = confirmed.copy()
+    out["violation_type"] = out.apply(resolve_confirmed_label, axis=1)
+    out["selection_source"] = "direct_confirmation"
+    out["event_anchor_trade_id"] = out["trade_id"]
+    out["reason"] = out.apply(build_candidate_reason, axis=1)
+    return out
+
+
+def expand_confirmed_sequences(candidate_pool: pd.DataFrame, confirmed: pd.DataFrame) -> pd.DataFrame:
+    if confirmed.empty:
+        out = confirmed.copy()
+        out["selection_source"] = pd.Series(dtype="object")
+        out["event_anchor_trade_id"] = pd.Series(dtype="object")
+        return out
+
+    pool = candidate_pool.copy()
+    if "confirmed" not in pool.columns:
+        pool["confirmed"] = False
+    if "confirmation_reason" not in pool.columns:
+        pool["confirmation_reason"] = ""
+
+    selected_parts = [confirmed.assign(selection_source="direct_confirmation")]
+
+    def expand_from_keys(mask: pd.Series, key_columns: list[str]) -> None:
+        confirmed_subset = (
+            confirmed.loc[mask, key_columns + ["event_anchor_trade_id", "violation_type", "final_score"]]
+            .sort_values("final_score", ascending=False)
+            .drop_duplicates(subset=key_columns)
+        )
+        if confirmed_subset.empty:
+            return
+        pool_keys = pd.MultiIndex.from_frame(pool[key_columns])
+        confirmed_keys = pd.MultiIndex.from_frame(confirmed_subset[key_columns])
+        expanded = pool.loc[pool_keys.isin(confirmed_keys)].copy()
+        if expanded.empty:
+            return
+        expanded = expanded.merge(confirmed_subset, on=key_columns, how="left", suffixes=("", "_anchor"))
+        expanded["confirmed"] = True
+        expanded["confirmation_reason"] = "expanded_from_confirmed_event"
+        expanded["selection_source"] = "event_expansion"
+        expanded["event_anchor_trade_id"] = expanded["event_anchor_trade_id"]
+        expanded["violation_type"] = expanded["violation_type_anchor"]
+        expanded = expanded.drop(columns=["violation_type_anchor", "final_score_anchor"])
+        selected_parts.append(expanded)
+
+    expand_from_keys(
+        (confirmed["violation_type"] == "ramping") & (confirmed["ramping_event_id"] > 0),
+        ["symbol", "date", "trader_id", "ramping_event_id"],
+    )
+    expand_from_keys(
+        (confirmed["violation_type"] == "coordinated_pump") & (confirmed["pump_dump_event_id"] > 0),
+        ["symbol", "date", "pump_dump_event_id"],
+    )
+    expand_from_keys(
+        (confirmed["violation_type"] == "round_trip_wash") & (confirmed["round_trip_event_id"] > 0),
+        ["symbol", "date", "trader_id", "round_trip_event_id"],
+    )
+    expand_from_keys(
+        (confirmed["violation_type"] == "aml_structuring") & confirmed["structuring_bucket"].notna(),
+        ["symbol", "date", "trader_id", "structuring_bucket"],
+    )
+    expand_from_keys(
+        (confirmed["violation_type"] == "wash_trading") & as_bool(confirmed["flag_wash_like"]),
+        ["symbol", "date", "trader_id"],
+    )
+
+    expanded = pd.concat(selected_parts, ignore_index=True)
+    expanded = expanded.sort_values(["symbol", "timestamp", "trade_id", "selection_source"])
+    expanded = expanded.drop_duplicates(subset=["symbol", "date", "trade_id"], keep="first")
+    expanded["reason"] = expanded.apply(build_candidate_reason, axis=1)
+    return expanded.reset_index(drop=True)
+
+
 def score_symbol(pair: PairData) -> pd.DataFrame:
     df = pair.trades.copy()
     df["reason"] = ""
@@ -791,6 +1066,8 @@ def score_symbol(pair: PairData) -> pd.DataFrame:
         ],
         default="Composite anomaly score exceeded threshold",
     )
+    df["raw_violation_type"] = df["violation_type"]
+    df["raw_reason"] = df["reason"]
     df["date"] = df["timestamp"].dt.date.astype(str)
     return df
 
@@ -800,6 +1077,8 @@ def choose_candidates(scored: pd.DataFrame, max_per_symbol: int, score_threshold
     selected = pass1[pass1["pass1_candidate"] & (pass1["final_score"] >= score_threshold)].copy()
     selected = second_pass_confirm(selected)
     selected = selected[selected["confirmed"]].copy()
+    selected = normalize_confirmed_candidates(selected)
+    selected = expand_confirmed_sequences(pass1, selected)
 
     # Keep the strategy conservative because false positives are expensive.
     selected = selected.sort_values(["symbol", "final_score"], ascending=[True, False])
@@ -836,65 +1115,130 @@ def load_all_pairs() -> list[PairData]:
     return pairs
 
 
-def run_pipeline(output_dir: Path, max_per_symbol: int, score_threshold: float) -> None:
+def _process_symbol_worker(symbol: str) -> tuple[str, dict, pd.DataFrame, int, int, float, float]:
+    load_start = perf_counter()
+    market = prepare_market(symbol, MARKET_FILES[symbol])
+    trades = prepare_trades(symbol, TRADE_FILES[symbol], market)
+    load_elapsed = perf_counter() - load_start
+    pair = PairData(symbol=symbol, market=market, trades=trades)
+    score_start = perf_counter()
+    scored = score_symbol(pair)
+    score_elapsed = perf_counter() - score_start
+    return (
+        symbol,
+        build_stats_row(pair),
+        scored,
+        len(market),
+        len(trades),
+        load_elapsed,
+        score_elapsed,
+    )
+
+
+def run_pipeline(
+    output_dir: Path,
+    max_per_symbol: int,
+    score_threshold: float,
+    workers: int,
+    write_all_scored: bool,
+) -> None:
     total_start = perf_counter()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print(
         f"[RUN] output_dir={output_dir} max_per_symbol={max_per_symbol} "
-        f"score_threshold={score_threshold:.2f}"
+        f"score_threshold={score_threshold:.2f} workers={workers} "
+        f"write_all_scored={write_all_scored}"
     )
 
-    load_start = perf_counter()
-    pairs = load_all_pairs()
-    load_elapsed = perf_counter() - load_start
-    print(f"[TIME] loading_all_pairs={format_seconds(load_elapsed)}")
+    symbol_results: list[tuple[str, dict, pd.DataFrame]] = []
+    processing_start = perf_counter()
+    if workers <= 1:
+        for symbol in MARKET_FILES:
+            symbol_name, stats_row, scored, market_rows, trades_rows, load_elapsed, score_elapsed = _process_symbol_worker(symbol)
+            symbol_results.append((symbol_name, stats_row, scored))
+            print(
+                f"[PROCESS] {symbol_name}: market_rows={market_rows} trades_rows={trades_rows} "
+                f"load={format_seconds(load_elapsed)} score={format_seconds(score_elapsed)}"
+            )
+    else:
+        completed: dict[str, tuple[str, dict, pd.DataFrame]] = {}
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            futures = {executor.submit(_process_symbol_worker, symbol): symbol for symbol in MARKET_FILES}
+            for future in as_completed(futures):
+                symbol_name, stats_row, scored, market_rows, trades_rows, load_elapsed, score_elapsed = future.result()
+                completed[symbol_name] = (symbol_name, stats_row, scored)
+                print(
+                    f"[PROCESS] {symbol_name}: market_rows={market_rows} trades_rows={trades_rows} "
+                    f"load={format_seconds(load_elapsed)} score={format_seconds(score_elapsed)}"
+                )
+        for symbol in MARKET_FILES:
+            symbol_results.append(completed[symbol])
+    processing_elapsed = perf_counter() - processing_start
+    print(f"[TIME] symbol_processing={format_seconds(processing_elapsed)}")
 
     stats_start = perf_counter()
-    stats_df = build_stats(pairs)
-    stats_df.to_csv(output_dir / "pair_stats.csv", index=False)
+    stats_df = pd.DataFrame([stats_row for _, stats_row, _ in symbol_results]).sort_values("symbol")
+    stats_df.to_csv(output_dir / "pair_stats.csv", index=False, float_format="%.8g")
     stats_elapsed = perf_counter() - stats_start
     print(f"[TIME] pair_stats={format_seconds(stats_elapsed)}")
 
-    # PHASE 6: Parallel symbol scoring using 4 worker processes
-    print(f"[PARALLEL] Starting symbol scoring with 4 workers")
-    score_start = perf_counter()
-    
-    with ProcessPoolExecutor(max_workers=4) as executor:
-        # Submit all jobs
-        futures_map = {executor.submit(_score_symbol_worker, pair): pair for pair in pairs}
-        scored_results = {}
-        
-        # Collect results as they complete (order may vary)
-        completed = 0
-        for future in as_completed(futures_map):
-            pair = futures_map[future]
-            try:
-                symbol, scored = future.result(timeout=300)
-                scored_results[symbol] = scored
-                completed += 1
-                print(
-                    f"[SCORE] {symbol}: scored_rows={len(scored)} "
-                    f"(parallel {completed}/8)",
-                    flush=True
-                )
-            except Exception as e:
-                print(f"[ERROR] {pair.symbol}: {str(e)}", flush=True)
-                raise
-    
-    # Restore original order
-    scored_parts = [scored_results[pair.symbol] for pair in pairs]
-    score_elapsed = perf_counter() - score_start
-    print(f"[TIME] parallel_scoring_phase={format_seconds(score_elapsed)}")
-
+    scored_parts = [scored for _, _, scored in symbol_results]
     concat_start = perf_counter()
     scored_df = pd.concat(scored_parts, ignore_index=True)
-    scored_df.sort_values(["symbol", "final_score"], ascending=[True, False]).to_csv(
-        output_dir / "all_scored_trades.csv",
-        index=False,
-    )
+    if write_all_scored:
+        scored_export_columns = [
+            "symbol",
+            "date",
+            "timestamp",
+            "trade_id",
+            "trader_id",
+            "side",
+            "price",
+            "quantity",
+            "notional",
+            "price_dev_mid",
+            "price_dev_close",
+            "qty_z",
+            "qty_rolling_z",
+            "notional_z",
+            "notional_rolling_z",
+            "price_dev_z",
+            "wallet_freq_z",
+            "qty_intraday_z",
+            "notional_intraday_z",
+            "score_peg_break",
+            "score_bat_volume",
+            "round_trip_score",
+            "structuring_score",
+            "ramping_score",
+            "pump_dump_score",
+            "marking_close_score",
+            "spoofing_score",
+            "iso_score",
+            "dbscan_noise",
+            "flag_peg_break",
+            "flag_bat_volume",
+            "flag_round_trip",
+            "flag_wash_like",
+            "flag_structuring",
+            "flag_ramping",
+            "flag_pump_dump",
+            "flag_marking_close",
+            "flag_spoofing_proxy",
+            "flag_layering_proxy",
+            "violation_type",
+            "final_score",
+            "reason",
+        ]
+        scored_df[scored_export_columns].to_csv(
+            output_dir / "all_scored_trades.csv",
+            index=False,
+            float_format="%.8g",
+        )
     concat_elapsed = perf_counter() - concat_start
-    print(f"[TIME] concat_and_write_all_scored={format_seconds(concat_elapsed)}")
+    timing_label = "concat_and_write_all_scored" if write_all_scored else "concat_scored"
+    print(f"[TIME] {timing_label}={format_seconds(concat_elapsed)}")
 
     candidate_start = perf_counter()
     candidates = choose_candidates(scored_df, max_per_symbol=max_per_symbol, score_threshold=score_threshold)
@@ -909,11 +1253,13 @@ def run_pipeline(output_dir: Path, max_per_symbol: int, score_threshold: float) 
             "trader_id",
             "violation_type",
             "final_score",
+            "selection_source",
+            "event_anchor_trade_id",
             "pass1_reason",
             "confirmation_reason",
             "reason",
         ]
-    ].to_csv(output_dir / "candidate_anomalies.csv", index=False)
+    ].to_csv(output_dir / "candidate_anomalies.csv", index=False, float_format="%.8g")
     candidate_elapsed = perf_counter() - candidate_start
     print(
         f"[TIME] candidate_selection={format_seconds(candidate_elapsed)} "
@@ -922,7 +1268,7 @@ def run_pipeline(output_dir: Path, max_per_symbol: int, score_threshold: float) 
 
     events_start = perf_counter()
     events = build_flagged_events(candidates)
-    events.to_csv(output_dir / "flagged_events.csv", index=False)
+    events.to_csv(output_dir / "flagged_events.csv", index=False, float_format="%.8g")
     events_elapsed = perf_counter() - events_start
     print(f"[TIME] flagged_events={format_seconds(events_elapsed)} events_rows={len(events)}")
 
@@ -932,6 +1278,7 @@ def run_pipeline(output_dir: Path, max_per_symbol: int, score_threshold: float) 
     candidates[["symbol", "date", "trade_id", "violation_type", "reason"]].to_csv(
         output_dir / "submission_with_labels.csv",
         index=False,
+        float_format="%.8g",
     )
     submission_elapsed = perf_counter() - submission_start
     print(
@@ -940,7 +1287,8 @@ def run_pipeline(output_dir: Path, max_per_symbol: int, score_threshold: float) 
     )
 
     print(f"Wrote {len(stats_df)} pair stats rows to {output_dir / 'pair_stats.csv'}")
-    print(f"Wrote {len(scored_df)} scored trades to {output_dir / 'all_scored_trades.csv'}")
+    if write_all_scored:
+        print(f"Wrote {len(scored_df)} scored trades to {output_dir / 'all_scored_trades.csv'}")
     print(f"Wrote {len(candidates)} candidate anomalies to {output_dir / 'candidate_anomalies.csv'}")
     print(f"Wrote {len(events)} flagged events to {output_dir / 'flagged_events.csv'}")
     print(f"Wrote {len(submission)} submission rows to {output_dir / 'submission.csv'}")
@@ -953,7 +1301,7 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         default="output_problem3",
-        help="Directory where pair_stats.csv, candidate_anomalies.csv, all_scored_trades.csv, and submission.csv will be written.",
+        help="Directory where the production output files will be written.",
     )
     parser.add_argument(
         "--max-per-symbol",
@@ -967,8 +1315,25 @@ def main() -> None:
         default=0.55,
         help="Minimum final score required before a trade is added to the candidate set.",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=max(1, min(len(MARKET_FILES), os.cpu_count() or 1)),
+        help="Number of worker processes to use for per-symbol loading and scoring.",
+    )
+    parser.add_argument(
+        "--write-all-scored",
+        action="store_true",
+        help="Also write all_scored_trades.csv. Leave off for the fastest production run.",
+    )
     args = parser.parse_args()
-    run_pipeline(Path(args.output_dir), max_per_symbol=args.max_per_symbol, score_threshold=args.score_threshold)
+    run_pipeline(
+        Path(args.output_dir),
+        max_per_symbol=args.max_per_symbol,
+        score_threshold=args.score_threshold,
+        workers=args.workers,
+        write_all_scored=args.write_all_scored,
+    )
 
 
 if __name__ == "__main__":
