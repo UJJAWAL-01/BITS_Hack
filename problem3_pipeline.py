@@ -15,25 +15,25 @@ except Exception:  # pragma: no cover - fallback when sklearn is missing
 
 
 MARKET_FILES = {
-    "BATUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-market/Binance_BATUSDT_2026_minute.csv",
-    "BTCUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-market/Binance_BTCUSDT_2026_minute.csv",
-    "DOGEUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-market/Binance_DOGEUSDT_2026_minute.csv",
-    "ETHUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-market/Binance_ETHUSDT_2026_minute.csv",
-    "LTCUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-market/Binance_LTCUSDT_2026_minute.csv",
-    "SOLUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-market/Binance_SOLUSDT_2026_minute.csv",
-    "USDCUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-market/Binance_USDCUSDT_2026_minute.csv",
-    "XRPUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-market/Binance_XRPUSDT_2026_minute.csv",
+    "BATUSDT": "student-pack\\crypto-market\\Binance_BATUSDT_2026_minute.csv",
+    "BTCUSDT": "student-pack\\crypto-market\\Binance_BTCUSDT_2026_minute.csv",
+    "DOGEUSDT": "student-pack\\crypto-market\\Binance_DOGEUSDT_2026_minute.csv",
+    "ETHUSDT": "student-pack\\crypto-market\\Binance_ETHUSDT_2026_minute.csv",
+    "LTCUSDT": "student-pack\\crypto-market\\Binance_LTCUSDT_2026_minute.csv",
+    "SOLUSDT": "student-pack\\crypto-market\\Binance_SOLUSDT_2026_minute.csv",
+    "USDCUSDT": "student-pack\\crypto-market\\Binance_USDCUSDT_2026_minute.csv",
+    "XRPUSDT": "student-pack\\crypto-market\\Binance_XRPUSDT_2026_minute.csv",
 }
 
 TRADE_FILES = {
-    "BATUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-trades/BATUSDT_trades.csv",
-    "BTCUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-trades/BTCUSDT_trades.csv",
-    "DOGEUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-trades/DOGEUSDT_trades.csv",
-    "ETHUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-trades/ETHUSDT_trades.csv",
-    "LTCUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-trades/LTCUSDT_trades.csv",
-    "SOLUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-trades/SOLUSDT_trades.csv",
-    "USDCUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-trades/USDCUSDT_trades.csv",
-    "XRPUSDT": "/Users/chintanshah/Downloads/student-pack/crypto-trades/XRPUSDT_trades.csv",
+    "BATUSDT": "student-pack\\crypto-trades\\BATUSDT_trades.csv",
+    "BTCUSDT": "student-pack\\crypto-trades\\BTCUSDT_trades.csv",
+    "DOGEUSDT": "student-pack\\crypto-trades\\DOGEUSDT_trades.csv",
+    "ETHUSDT": "student-pack\\crypto-trades\\ETHUSDT_trades.csv",
+    "LTCUSDT": "student-pack\\crypto-trades\\LTCUSDT_trades.csv",
+    "SOLUSDT": "student-pack\\crypto-trades\\SOLUSDT_trades.csv",
+    "USDCUSDT": "student-pack\\crypto-trades\\USDCUSDT_trades.csv",
+    "XRPUSDT": "student-pack\\crypto-trades\\XRPUSDT_trades.csv",
 }
 
 VIOLATION_PRIORITY = [
